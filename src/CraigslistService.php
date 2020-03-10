@@ -90,24 +90,12 @@ class CraigslistService
      * @return bool|string
      */
     function getUrlContents($url) {
-//        $store_response_code = false;
-//        if (strpos($url,'craigslist') !== false) {
-//            $store_response_code = true;
-//        }
-
         $ch = curl_init();
-
         curl_setopt($ch, CURLOPT_AUTOREFERER, TRUE);
         curl_setopt($ch, CURLOPT_HEADER, 0);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, TRUE);
-
-        $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-//        if($store_response_code){
-//            CraigslistService::logResponse($httpcode);
-//        }
-
         $data = curl_exec($ch);
         curl_close($ch);
 
@@ -131,23 +119,12 @@ class CraigslistService
         }
         $source_feeds = array_values($source_feeds);
 
-//        $sync_counts = CraigslistService::countSync();
-//        $remaining_feeds = (int)$sync_counts['all']- (int)$sync_counts['downloaded'];
-//        (new CraigslistService)->logDebug(json_encode(array('downloadFeeds_ISSUE', $source_feeds)));
         for ($i = 1; $i <= (int)$this->config['feeds_per_minute']; $i++) {
             $pickSingleFeed = rand(0,count($source_feeds));
             $handle = @fopen($source_feeds[$i]['url'], 'r');
 
             if(!$handle){
                 (new CraigslistService)->logDebug(json_encode(array('downloadFeeds_ISSUE', date('Y-m-d_H-i-s', time()), $source_feeds[$i]['url'])));
-//                $cl = (file_get_contents(__DIR__.'/../dummy.xml')) ?? null;
-//                $cl_xml = simplexml_load_string($cl);
-//                if($cl){
-//                    $cl_name = $pickSingleFeed.'_'.$pickSingleFeed.'.xml';
-//                    $cl_xml->asXML(__DIR__.'/../feeds/'.$cl_name);
-//                    CraigslistService::uploadFeedsToServer($cl_name);
-//                    sleep((int)$this->config['feeds_sleep_seconds']);
-//                }
             }else{
                 $cl = (file_get_contents($source_feeds[$i]['url'])) ?? null;
                 $cl_xml = simplexml_load_string($cl);
@@ -160,7 +137,6 @@ class CraigslistService
             }
         }
 
-//        (new CraigslistService())->logFeedsDownloadTime($source_feeds[$pickSingleFeed]['name'].'.xml');
         CraigslistService::generateLocalOPML();
 
         return true;
@@ -301,8 +277,6 @@ class CraigslistService
         foreach ($getDownloadedFeeds as $feed){
             unlink(__DIR__.'/../feeds/'.$feed);
         }
-//        unlink(__DIR__.'/../cron_debug.txt');
-//        unlink(__DIR__.'/../catch_errors');
         $content ='';
         $fp = fopen( __DIR__ . "/../catch_errors","wb");
         $fp2 = fopen( __DIR__ . "/../cron_debug.txt","wb");
