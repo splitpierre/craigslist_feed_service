@@ -5,13 +5,13 @@
 global $actionMessage, $messageClass;
 include './src/CraigslistService.php';
 include('./vendor/erusev/parsedown/Parsedown.php');
-
+$config = parse_ini_file('config.ini', true, INI_SCANNER_RAW);
 $actionMessage = '';
 $messageClass = '';
 
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
+//ini_set('display_errors', 1);
+//ini_set('display_startup_errors', 1);
+//error_reporting(E_ALL);
 
 $opml_directory = scandir('./opml');
 unset($opml_directory[0]);
@@ -23,6 +23,7 @@ unset($opml_directory[1]);
 $action = $_GET['unlink'] ?? '';
 $success = $_GET['success'] ?? '';
 $download = $_GET['download'] ?? '';
+$delete = $_GET['reset'] ?? '';
 
 if($action){
     if(!unlink('./feeds/'.$action)){
@@ -32,6 +33,10 @@ if($action){
         header('Location: '. (new CraigslistService)->getBaseUrl() . '?success=true');
     }
 }
+if($delete){
+    (new CraigslistService())->resetFeedData();
+    header('Location: '. (new CraigslistService)->getBaseUrl());
+}
 if($success){
     $messageClass = 'alert-success';
     $actionMessage = "Success";
@@ -39,13 +44,7 @@ if($success){
 /**
  * TESTS
  */
-//if($download == 'true'){
-//    $downloaded_feeds = (new CraigslistService)->downloadRandomFeed();
-//    if($downloaded_feeds){
-//        header('Location: '. (new CraigslistService)->getBaseUrl() . '?success=true');
-//    }
-//}
-(new CraigslistService)->generateLocalOPML();
+//(new CraigslistService)->generateLocalOPML();
 //(new CraigslistService)->downloadRandomFeed();
 //(new CraigslistService())->logCronTask('error');
 ?>
@@ -76,32 +75,59 @@ if($success){
                 <div class="collapse navbar-collapse" id="navbarCollapse">
 
                     <div class="mt-2 mt-md-0 ml-auto">
-                        <a href="<?php echo (new CraigslistService())->getBaseUrl(); ?>" class="btn btn-light btn-sm">
-                            <i class="fa fa-clock-o"></i> <b>Last Cron:</b>
+                        <a data-toggle="tooltip" title="Last Time Cron Job Ran" href="<?php echo (new CraigslistService())->getBaseUrl(); ?>" class="btn btn-light btn-sm">
+                            <i class="fa fa-clock-o"></i>
+                            <b>
                             <?php
                             $last_run = (new CraigslistService())->lastCronRun();
-                            echo ($last_run !== 'ERROR') ? date("F d, Y h:i:s", $last_run): $last_run;
+                            if($last_run !== null){
+                                echo  date("Y/m/d h:i:s", $last_run);
+                            } else {
+                                echo 'NA';
+                            }
                             ?>
+                            </b>
                         </a>
-                        <a href="<?php echo (new CraigslistService())->getBaseUrl(); ?>" class="btn btn-info btn-sm">
+                        <a data-toggle="tooltip" title="Feeds Download Progress - The ETA might never
+                        finish if you have feeds with empty listing results on your source OPML files."
+                           href="<?php echo (new CraigslistService())->getBaseUrl(); ?>" class="btn btn-info btn-sm">
                             <?php $sync_counts= (new CraigslistService())->countSync();?>
                             <i class="fa fa-refresh"></i> <b>Sync: <?php echo $sync_counts['downloaded'];?>/<?php echo $sync_counts['all'];?>
                                 | ETA:
                                 <?php
-                                /**
-                                 * ATTENTION, ETA SHOULD BE DIVIDED BY HOW MANY FEEDS ARE DOWNLOADED PER MINUTE
-                                */
-                                $minutesRemaining = ((int)$sync_counts['all']-(int)$sync_counts['downloaded'])/5;
-                                if($minutesRemaining > 60){
-                                    $hours = $minutesRemaining/60;
-                                    echo round($hours). ' Hour(s)';
-
-                                }  else {
-                                    echo $minutesRemaining. ' Min(s)';
-                                }
+                                $remaining_feeds = (int)$sync_counts['all'] - (int)$sync_counts['downloaded'];
+                                $minutesRemaining = ($remaining_feeds*(int)$config['cron_min_interval'])/(int)$config['feeds_per_minute'];
+                                echo (new CraigslistService())->convertToHoursMins($minutesRemaining, '%02d hours %02d minutes'); //
                                 ?>
                             </b>
                         </a>
+
+
+
+                        <?php
+                        $ping_cl = (new CraigslistService())->pingCraigslist();
+                        if($ping_cl == 403 || $ping_cl == 404){
+                            $class = 'danger';
+                            $icon = 'exclamation-triangle';
+                        } elseif ($ping_cl == 200 || $ping_cl == 301){
+                            $class = 'success';
+                            $icon = 'check';
+                        } else {
+                            $class = 'warning';
+                            $icon = 'question';
+                        }
+                        ?>
+                        <a data-toggle="tooltip" title="Craigslist HTTP Response Code (Checks random feed from OPML list)"
+                           href="<?php echo (new CraigslistService())->getBaseUrl(); ?>" class="btn btn-<?php echo $class;?> btn-sm">
+                            <?php echo $ping_cl;?>
+                            <i class="fa fa-<?php echo $icon; ?>"></i>
+                            <b>
+                            </b>
+                        </a>
+
+                        <a data-toggle="tooltip" title="FULL RESET - This will delete all the downloaded XML/OPML feeds and logs from both localhost and live server" data-delete-all="true"
+                           href="javascript:void(0)" class="btn btn-danger btn-md">
+                            <i class="fa fa-trash"></i></a>
                     </div>
                 </div>
             </nav>
@@ -109,6 +135,8 @@ if($success){
 
         <main role="main" class="container-fluid p-3 mt-5">
             <?php
+//            (new CraigslistService())->deleteFeedsFromServer();
+
             if($actionMessage){
                 ?>
                 <div class="alert <?php echo $messageClass;?>">
@@ -155,7 +183,7 @@ if($success){
                             </div>
                         </div>
                         <div class=" p-3">
-                            <table id="opml_table" class="display" style="width:100%">
+                            <table id="opml_table" class="display responsive" style="width:100%">
                                 <thead>
                                 <tr>
                                     <th>Name</th>
@@ -185,12 +213,12 @@ if($success){
                             <div class="alert alert-info mt-3" role="alert">
                                 <ul>
                                     <li>By downloading the OPML bellow, you will get the OPML with all local feeds to use on Drupal.</li>
-                                    <li>Make sure you setup your feed importer on your Drupal site to run with a safe distance (Recommended 12hrs), from this service feed reset/removal (midnight)</li>
+                                    <li>Make sure you setup your feed importer on your Drupal site to run with a safe distance (Recommended +6hrs), from this service feed automatic reset/removal (midnight)</li>
                                 </ul>
                             </div>
                         </div>
                         <div class=" p-3 ">
-                            <table id="feeds_table" class="display" style="width:100%">
+                            <table id="feeds_table" class="display responsive" style="width:100%">
                                 <thead>
                                 <tr>
                                     <th>URL</th>
@@ -221,11 +249,22 @@ if($success){
 
                     <div class="container-fluid border-bottom border-left border-right bg-white">
                         <div class="row p-3 ">
-                            <div class="col-md-12">
-                                <!--                        <h3>Debug Log:</h3>-->
-                                <code>
-                                    <?php echo (new CraigslistService())->getDebugLog();?>
-                                </code>
+                            <div class="col-md-6">
+                                <h3>Debug Log:</h3>
+                                <div class="text-danger">
+                                    <?php
+                                    $explode = explode(PHP_EOL, (string)(new CraigslistService())->getDebugLog()['cron_debug']);
+                                    foreach ($explode as $line){
+                                        echo ($line) .'<br>';
+                                    }
+                                    ?>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h3>Last Errors Thrown by Cron Task:</h3>
+                                <?php
+                                print_r((new CraigslistService())->getDebugLog()['catch_errors']);
+                                ?>
                             </div>
                         </div>
                     </div>
@@ -264,21 +303,34 @@ if($success){
     <script src="//cdn.datatables.net/buttons/1.6.1/js/dataTables.buttons.min.js" crossorigin="anonymous"></script>
     <script>
         $(document).ready( function () {
+            $(function () {
+                $('[data-toggle="tooltip"]').tooltip()
+            })
+            $('a[data-delete-all]').on('click', function () {
+                var r = confirm("Are you sure you want to continue?" +
+                    "\n\nIt's safe to continue, it will delete all LOCAL FEEDS entries, delete generated local OPML and clear debug logs.");
+                if (r == true) {
+                    window.location.href = '<?php echo (new CraigslistService)->getBaseUrl();?>?reset='+$(this).attr('data-delete-all');
+                }
+            });
             $('a[data-item]').on('click', function () {
                 var r = confirm("Are you sure?");
                 if (r == true) {
                     window.location.href = '<?php echo (new CraigslistService)->getBaseUrl();?>?unlink='+$(this).attr('data-item');
                 }
             });
-            $('#opml_table').DataTable();
+            $('#opml_table').DataTable({responsive: true,scroller:true, scrollY:400});
             var feeds_table = $('#feeds_table').DataTable( {
+                responsive: true,
+                scroller: true,
+                scrollY: 400,
                 dom: 'Bfrtip',
                 buttons: [
                     {
                         text: 'Download OPML',
                         action: function ( e, dt, node, config ) {
                             // alert( 'Button activated' );
-                            window.location.href = '<?php echo (new CraigslistService)->getBaseUrl(); ?>opml_local.xml';
+                            window.location.href = '<?php echo $config['server_base']; ?>opml_local.xml';
                         }
                     }
                 ]

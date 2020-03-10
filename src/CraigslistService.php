@@ -1,6 +1,21 @@
 <?php
+set_include_path(get_include_path() . PATH_SEPARATOR . 'phpseclib');
+include_once __DIR__.'/../vendor/autoload.php';
+$loader = new \Composer\Autoload\ClassLoader();
+$loader->addPsr4('phpseclib\\', __DIR__ . '/path/to/phpseclib2.0');
+$loader->register();
+
+use phpseclib\Crypt\RSA;
+use phpseclib\Net\SFTP;
+
 class CraigslistService
 {
+    public $config;
+
+    public function __construct() {
+        $this->config = parse_ini_file(__DIR__.'/../config.ini', true, INI_SCANNER_RAW);
+    }
+
     /**
      * Get Base URL
      * @return string
@@ -10,7 +25,11 @@ class CraigslistService
         if($server_host){
             $current_url = 'http://'.$server_host.dirname($_SERVER['PHP_SELF']).'/';
         } else {
-            $current_url = 'http://c27f0133.ngrok.io/sportscarcurrent/feedservice/';
+            if($this->config['method'] === 'ngrok'){
+                $current_url = $this->config['ngrok_url'].$this->config['base_url'];
+            } else {
+                $current_url = $this->config['localhost'].$this->config['base_url'];//defaults to localhost
+            }
         }
         return $current_url;
     }
@@ -28,7 +47,6 @@ class CraigslistService
             $getOpml = CraigslistService::getUrlContents(CraigslistService::getBaseUrl() . "opml/".$this_directory);
             $xml = simplexml_load_string($getOpml);
 
-//            var_dump(CraigslistService::getBaseUrl() . "opml/".$this_directory);
             foreach ($xml->body->outline as $item) {
                 array_push($list,
                     array(
@@ -68,7 +86,6 @@ class CraigslistService
 
     /**
      * Get Contents from URL with CURL
-     * Todo: Grab the response header code
      * @param $url
      * @return bool|string
      */
@@ -106,66 +123,74 @@ class CraigslistService
         $downloadedFeeds = (!empty($getDownloadedFeeds) && is_array($getDownloadedFeeds)) ? $getDownloadedFeeds: array();
         $source_feeds = (new CraigslistService)->getOpmlList();
 
-
         //UNSET EXISTING FEEDS FROM SOURCE
         foreach ($source_feeds as $key=>$source_feed) {
             if(in_array($source_feed['name'] . '.xml', $downloadedFeeds)) {
                 unset($source_feeds[$key]);
             }
         }
-//        var_dump($source_feeds);
+
         $sync_counts = CraigslistService::countSync();
 
         $remaining_feeds = (int)$sync_counts['all']- (int)$sync_counts['downloaded'];
-        $pickSingleFeed = rand(0,$remaining_feeds);
-        $pickSingleFeed2 = rand(0,$remaining_feeds);
-        $pickSingleFeed3 = rand(0,$remaining_feeds);
-        $pickSingleFeed4 = rand(0,$remaining_feeds);
-        $pickSingleFeed5 = rand(0,$remaining_feeds);
 
-//        var_dump($source_feeds[$pickSingleFeed]['url']);
-        $cl = (file_get_contents($source_feeds[$pickSingleFeed]['url'])) ?? null;
-        $cl2 = (file_get_contents($source_feeds[$pickSingleFeed2]['url'])) ?? null;
-        $cl3 = (file_get_contents($source_feeds[$pickSingleFeed3]['url'])) ?? null;
-        $cl4 = (file_get_contents($source_feeds[$pickSingleFeed4]['url'])) ?? null;
-        $cl5 = (file_get_contents($source_feeds[$pickSingleFeed5]['url'])) ?? null;
+        for ($i = 1; $i <= (int)$this->config['feeds_per_minute']; $i++) {
+            $pickSingleFeed = rand(0,$remaining_feeds);
+            $handle = @fopen($source_feeds[$pickSingleFeed]['url'], 'r');
 
-        $cl_xml = simplexml_load_string($cl);
-        $cl2_xml = simplexml_load_string($cl2);
-        $cl3_xml = simplexml_load_string($cl3);
-        $cl4_xml = simplexml_load_string($cl4);
-        $cl5_xml = simplexml_load_string($cl5);
-
-        if($cl){
-            $cl_xml->asXML(__DIR__.'/../feeds/'.$source_feeds[$pickSingleFeed]['name'].'.xml');
-            sleep('3');
+            if(!$handle){
+                $cl = (file_get_contents(__DIR__.'/../dummy.xml')) ?? null;
+                $cl_xml = simplexml_load_string($cl);
+                if($cl){
+                    $cl_name = $pickSingleFeed.'_'.$pickSingleFeed.'.xml';
+                    $cl_xml->asXML(__DIR__.'/../feeds/'.$cl_name);
+                    CraigslistService::uploadFeedsToServer($cl_name);
+                    sleep((int)$this->config['feeds_sleep_seconds']);
+                }
+            }else{
+                $cl = (file_get_contents($source_feeds[$pickSingleFeed]['url'])) ?? null;
+                $cl_xml = simplexml_load_string($cl);
+                if($cl){
+                    $cl_name = $source_feeds[$pickSingleFeed]['name'].'.xml';
+                    $cl_xml->asXML(__DIR__.'/../feeds/'.$cl_name);
+                    CraigslistService::uploadFeedsToServer($cl_name);
+                    sleep((int)$this->config['feeds_sleep_seconds']);
+                }
+            }
         }
-        if($cl2){
-            $cl2_xml->asXML(__DIR__.'/../feeds/'.$source_feeds[$pickSingleFeed2]['name'].'.xml');
-            sleep('3');
-        }
-        if($cl3) {
-            $cl3_xml->asXML(__DIR__ . '/../feeds/' . $source_feeds[$pickSingleFeed3]['name'] . '.xml');
-            sleep('3');
-        }
-        if($cl4){
-            $cl4_xml->asXML(__DIR__.'/../feeds/'.$source_feeds[$pickSingleFeed4]['name'].'.xml');
-            sleep('3');
-        }
-        if($cl5){
-            $cl5_xml->asXML(__DIR__.'/../feeds/'.$source_feeds[$pickSingleFeed5]['name'].'.xml');
-        }
-
 
 //        (new CraigslistService())->logFeedsDownloadTime($source_feeds[$pickSingleFeed]['name'].'.xml');
         CraigslistService::generateLocalOPML();
+
         return true;
+    }
+
+    /**
+     * Ping Craigslist
+     * @return mixed
+     */
+    function pingCraigslist(){
+        $source_feeds = (new CraigslistService)->getOpmlList();
+        $pickRandom = rand(0,count($source_feeds));
+        $url = $source_feeds[$pickRandom]['url'];
+        $handle = curl_init($url);
+        curl_setopt($handle,  CURLOPT_RETURNTRANSFER, TRUE);
+        $response = curl_exec($handle);
+        $httpCode = curl_getinfo($handle, CURLINFO_HTTP_CODE);
+        curl_close($handle);
+        return $httpCode;
     }
 
     /**
      * Generate Local OPML File
      */
     function generateLocalOPML(){
+        $key = new RSA();
+        $sftp = new SFTP($this->config['sftp_server'], $this->config['sftp_port']);
+
+        $key->setPassword($this->config['sftp_key_pass']);
+        $key->loadKey(file_get_contents(CraigslistService::getBaseUrl().$this->config['sftp_key']));
+
         $opml_header = '<?xml version="1.0" encoding="UTF-8"?>'.PHP_EOL.'<opml version="1.0">'.PHP_EOL.'<head>'.PHP_EOL
             .'<title>Feeds exported by OPML Editor</title>'.PHP_EOL.'</head>'.PHP_EOL;
         $opml_content = '';
@@ -174,18 +199,100 @@ class CraigslistService
         $feedList = (new CraigslistService)->getDownloadedFeeds();
         $opml_content .= '<body>'.PHP_EOL;
         foreach ($feedList as $feed_item){
-            $opml_content .= '<outline title="'.$feed_item.'" text="'.$feed_item.'" xmlUrl="'.(new CraigslistService)->getBaseUrl().'feeds/'.$feed_item.'"/>'.PHP_EOL;
+            $opml_content .= '<outline title="'.$feed_item.'" text="'.$feed_item.'" xmlUrl="'.$this->config['server_base'].'feeds/'.$feed_item.'"/>'.PHP_EOL;
         }
         $opml_content .= '</body>'.PHP_EOL;
         unlink(__DIR__ . "/../opml_local.xml");
         $fp = fopen( __DIR__ . "/../opml_local.xml","wb");
         fwrite($fp,$opml_header.$opml_content.$opml_footer);
         fclose($fp);
+
+
+        if ($sftp->login($this->config['sftp_login'], $key) ) {
+            $sftp->chdir($this->config['sftp_dir']);
+            $sftp->delete('opml_local.xml', false);
+            $sftp->chdir('..');
+            $sftp->chdir('..');
+            if($sftp->put($this->config['sftp_dir'].'/opml_local.xml', __DIR__.'/../opml_local.xml', SFTP::SOURCE_LOCAL_FILE)){
+                (new CraigslistService)->logDebug(json_encode(array('sftp_opml_local_success', date('Y-m-d_H-i-s', time()))));
+            } else {
+                (new CraigslistService)->logDebug(json_encode(array('sftp_opml_local_failed', date('Y-m-d_H-i-s', time()))));
+            }
+        } else {
+            (new CraigslistService)->logDebug(json_encode(array('sftp_connect_failed_gen_opml', date('Y-m-d_H-i-s', time()))));
+            exit('Login Failed');
+        }
+
+
     }
 
+    /**
+     * Upload Feeds into an online server with SFTP
+     * @param $which
+     * @return bool
+     */
+    function uploadFeedsToServer($which){
+        $key = new RSA();
+        $sftp = new SFTP($this->config['sftp_server'], $this->config['sftp_port']);
+
+        $key->setPassword($this->config['sftp_key_pass']);
+        $key->loadKey(file_get_contents(CraigslistService::getBaseUrl().$this->config['sftp_key']));
+
+        if ($sftp->login($this->config['sftp_login'], $key) ) {
+            // send all feeds
+            (new CraigslistService)->logDebug(json_encode(array('sftp_connect_success', date('Y-m-d_H-i-s', time()))));
+
+            if($which === 'all'){
+                $downloaded_feeds = (new CraigslistService())->getDownloadedFeeds();
+
+                foreach ($downloaded_feeds as $feed){
+                    $sftp->put($this->config['sftp_dir'].'/feeds/'.$feed, __DIR__.'/../feeds/'.$feed, SFTP::SOURCE_LOCAL_FILE);
+                }
+
+                return true;
+            } else {
+                // send single feed
+                $feed = $which;
+                if($sftp->put($this->config['sftp_dir'].'/feeds/'.$feed, __DIR__.'/../feeds/'.$feed, SFTP::SOURCE_LOCAL_FILE)){
+                    (new CraigslistService)->logDebug(json_encode(array('sftp_upload_feed_success', date('Y-m-d_H-i-s', time()), 'feed'=>$feed)));
+                } else {
+                    (new CraigslistService)->logDebug(json_encode(array('sftp_upload_feed_failed', date('Y-m-d_H-i-s', time()), 'feed'=>$feed)));
+                }
+            }
+        } else {
+            (new CraigslistService)->logDebug(json_encode(array('sftp_connect_failed', date('Y-m-d_H-i-s', time()))));
+            exit('Login Failed');
+        }
+    }
 
     /**
-     * Remove All Local Feeds & Logs
+     * Delete All Feeds From Live Server
+     */
+    function deleteFeedsFromServer(){
+        $key = new RSA();
+        $sftp = new SFTP($this->config['sftp_server'], $this->config['sftp_port']);
+
+        $key->setPassword($this->config['sftp_key_pass']);
+        $key->loadKey(file_get_contents(CraigslistService::getBaseUrl().$this->config['sftp_key']));
+
+        if ($sftp->login($this->config['sftp_login'], $key) ) {
+            $sftp->chdir($this->config['sftp_dir'].'/feeds');
+            foreach ($sftp->nlist() as $file){
+                if(strpos($file, 'xml')){
+                    $sftp->delete($file, false);
+                }
+            }
+            $sftp->chdir('..');
+            $sftp->delete('opml_local.xml', false);
+            (new CraigslistService)->logDebug(json_encode(array('sftp_feeds_deleted', date('Y-m-d_H-i-s', time()))));
+        } else {
+            (new CraigslistService)->logDebug(json_encode(array('sftp_connect_failed_del_feeds', date('Y-m-d_H-i-s', time()))));
+            exit('Login Failed');
+        }
+    }
+
+    /**
+     * Remove All Feeds & Logs from local and online server
      * @return bool
      */
     function resetFeedData(){
@@ -194,6 +301,12 @@ class CraigslistService
             unlink(__DIR__.'/../feeds/'.$feed);
         }
         unlink(__DIR__.'/../cron_debug.txt');
+//        unlink(__DIR__.'/../catch_errors');
+
+        if($this->config['method'] =='upload'){
+            CraigslistService::deleteFeedsFromServer();
+        }
+
         return true;
     }
 
@@ -215,7 +328,11 @@ class CraigslistService
      * @return bool|string
      */
     function getDebugLog(){
-        return CraigslistService::getUrlContents(CraigslistService::getBaseUrl() . "cron_debug.txt") ?? '';
+        $debug_logs = array(
+            'cron_debug'=>CraigslistService::getUrlContents(CraigslistService::getBaseUrl() . "cron_debug.txt") ?? '',
+            'catch_errors'=>CraigslistService::getUrlContents(CraigslistService::getBaseUrl() . "catch_errors") ?? ''
+        );
+        return $debug_logs;
     }
 
     /**
@@ -226,7 +343,7 @@ class CraigslistService
         $content = time();
 
         if($param){$content = 'ERROR';}
-        $fp = fopen( __DIR__ . "/../cron_logs.txt","wb");
+        $fp = fopen( __DIR__ . "/../cron_last_time.txt","wb");
         fwrite($fp,$content);
         fclose($fp);
     }
@@ -236,57 +353,28 @@ class CraigslistService
      * @return false|string
      */
     function lastCronRun(){
-        $fp = fopen( __DIR__ . "/../cron_logs.txt","r");
-        if($fp){
-            $time_ran = fread($fp,filesize("cron_logs.txt"));
+        if(file_exists(__DIR__ . "/../cron_last_time.txt")){
+            $fp = fopen( __DIR__ . "/../cron_last_time.txt","r");
+            $time_ran = fread($fp,filesize("cron_last_time.txt"));
             fclose($fp);
             return $time_ran;
-        } else {return '--';}
+        } else {
+            return null;
+        }
     }
 
     /**
-     * Todo: Log Feed file name and time on file
-     * @param $feedName
+     * Convert Minutes into Hour and Minutes
+     * @param $time
+     * @param string $format
+     * @return string|void
      */
-//    function logFeedsDownloadTime($feedName){
-//        $name_time = '{"'.$feedName . '","'.time().'"}'.PHP_EOL;
-//        $fp = fopen( __DIR__ . "/../feeds_time.txt","a");
-//        fwrite($fp, $name_time);
-//        fclose($fp);
-//    }
-//
-    /**
-     * Todo: Log Feed file name and time on file
-     * @param $feedName
-     */
-//    function checkFeedTimeDelete($feedName){
-//        $getFeedsLog = CraigslistService::getUrlContents(CraigslistService::getBaseUrl() . "feeds_time.txt") ?? '';
-//        $handle = fopen(__DIR__ . "feeds_time.txt", "r");
-//        if ($handle) {
-//            while (($line = fgets($handle)) !== false) {
-//                // process the line read.
-//                var_dump($line);//todo:check each feed if matching one is older than 24 hrs and delete them if so
-//            }
-////            fclose($handle);
-//        } else {
-//            // error opening the file.
-//        }
-//    }
-
-    /**
-     * Todo: Log Last CL Response Code
-     * @param null $param
-     */
-//    function logResponse($code){
-//        $fp = fopen( __DIR__ . "/../last_response.txt","wb");
-//        fwrite($fp,$code.PHP_EOL);
-//        fclose($fp);
-//    }
-    /**
-     * Get Last CL Response Code
-     * @return bool|string
-     */
-//    function lastResponse(){
-//        return CraigslistService::getUrlContents(CraigslistService::getBaseUrl() . "last_response.txt") ?? '';
-//    }
+    function convertToHoursMins($time, $format = '%02d:%02d') {
+        if ($time < 1) {
+            return;
+        }
+        $hours = floor($time / 60);
+        $minutes = ($time % 60);
+        return sprintf($format, $hours, $minutes);
+    }
 }

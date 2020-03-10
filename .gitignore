@@ -1,2 +1,10 @@
-/duckdns/
 /ngrok
+/config.ini
+/feeds
+/cron_debug.txt
+/cron_last_time.txt
+/opml_local.xml
+/id_rsa_cl_service
+/id_rsa_cl_service.ppk
+/id_rsa_cl_service.pub
+/catch_errors
