@@ -5,6 +5,7 @@
  </head>
  <body>
   
-  <outline title="webizz" text="webizz" xmlUrl="http://burlington.craigslist.org/search/cta?query=%22austin+healey%22%7Chealey%7Cbj8%7C%22bj-8%22%7C%22bj+8%22%7Cporsche%7C356%7Cmg%7Cmga%7Cmgb%7Ctriumph%7Ctr3%7Ctr4%7C%22tr-3%22%7C%22tr-4%22%7Cjaguar%7Cxke%7Cmercedes%7C%22alfa+romeo%22%7Cbugeye%7C%22bug+eye%22%7C%22sprite%22-diesel%2C-ghia&amp;sort=rel&amp;min_auto_year=1945&amp;max_auto_year=1969&amp;format=rss"/>
+  <outline title="burlington" text="burlington" xmlUrl="http://burlington.craigslist.org/search/cta?query=%22austin+healey%22%7Chealey%7Cbj8%7C%22bj-8%22%7C%22bj+8%22%7Cporsche%7C356%7Cmg%7Cmga%7Cmgb%7Ctriumph%7Ctr3%7Ctr4%7C%22tr-3%22%7C%22tr-4%22%7Cjaguar%7Cxke%7Cmercedes%7C%22alfa+romeo%22%7Cbugeye%7C%22bug+eye%22%7C%22sprite%22-diesel%2C-ghia&amp;sort=rel&amp;min_auto_year=1945&amp;max_auto_year=1969&amp;format=rss"/>
+<!--   <outline title="vermont" text="vermont" xmlUrl="http://vermont.craigslist.org/search/cta?query=%22austin+healey%22%7Chealey%7Cbj8%7C%22bj-8%22%7C%22bj+8%22%7Cporsche%7C356%7Cmg%7Cmga%7Cmgb%7Ctriumph%7Ctr3%7Ctr4%7C%22tr-3%22%7C%22tr-4%22%7Cjaguar%7Cxke%7Cmercedes%7C%22alfa+romeo%22%7Cbugeye%7C%22bug+eye%22%7C%22sprite%22-diesel%2C-ghia&amp;sort=rel&amp;min_auto_year=1945&amp;max_auto_year=1969&amp;format=rss"/> -->
  </body>
 </opml>

@@ -118,7 +118,7 @@ class CraigslistService
      * Download One Random Feed (Existing ones excluded)
      * @return bool
      */
-    function downloadRandomFeed(){
+    function downloadFeeds(){
         $getDownloadedFeeds = (new CraigslistService())->getDownloadedFeeds();
         $downloadedFeeds = (!empty($getDownloadedFeeds) && is_array($getDownloadedFeeds)) ? $getDownloadedFeeds: array();
         $source_feeds = (new CraigslistService)->getOpmlList();
@@ -129,29 +129,30 @@ class CraigslistService
                 unset($source_feeds[$key]);
             }
         }
+        $source_feeds = array_values($source_feeds);
 
-        $sync_counts = CraigslistService::countSync();
-
-        $remaining_feeds = (int)$sync_counts['all']- (int)$sync_counts['downloaded'];
-
+//        $sync_counts = CraigslistService::countSync();
+//        $remaining_feeds = (int)$sync_counts['all']- (int)$sync_counts['downloaded'];
+//        (new CraigslistService)->logDebug(json_encode(array('downloadFeeds_ISSUE', $source_feeds)));
         for ($i = 1; $i <= (int)$this->config['feeds_per_minute']; $i++) {
-            $pickSingleFeed = rand(0,$remaining_feeds);
-            $handle = @fopen($source_feeds[$pickSingleFeed]['url'], 'r');
+            $pickSingleFeed = rand(0,count($source_feeds));
+            $handle = @fopen($source_feeds[$i]['url'], 'r');
 
             if(!$handle){
-                $cl = (file_get_contents(__DIR__.'/../dummy.xml')) ?? null;
-                $cl_xml = simplexml_load_string($cl);
-                if($cl){
-                    $cl_name = $pickSingleFeed.'_'.$pickSingleFeed.'.xml';
-                    $cl_xml->asXML(__DIR__.'/../feeds/'.$cl_name);
-                    CraigslistService::uploadFeedsToServer($cl_name);
-                    sleep((int)$this->config['feeds_sleep_seconds']);
-                }
+                (new CraigslistService)->logDebug(json_encode(array('downloadFeeds_ISSUE', date('Y-m-d_H-i-s', time()), $source_feeds[$i]['url'])));
+//                $cl = (file_get_contents(__DIR__.'/../dummy.xml')) ?? null;
+//                $cl_xml = simplexml_load_string($cl);
+//                if($cl){
+//                    $cl_name = $pickSingleFeed.'_'.$pickSingleFeed.'.xml';
+//                    $cl_xml->asXML(__DIR__.'/../feeds/'.$cl_name);
+//                    CraigslistService::uploadFeedsToServer($cl_name);
+//                    sleep((int)$this->config['feeds_sleep_seconds']);
+//                }
             }else{
-                $cl = (file_get_contents($source_feeds[$pickSingleFeed]['url'])) ?? null;
+                $cl = (file_get_contents($source_feeds[$i]['url'])) ?? null;
                 $cl_xml = simplexml_load_string($cl);
                 if($cl){
-                    $cl_name = $source_feeds[$pickSingleFeed]['name'].'.xml';
+                    $cl_name = $source_feeds[$i]['name'].'.xml';
                     $cl_xml->asXML(__DIR__.'/../feeds/'.$cl_name);
                     CraigslistService::uploadFeedsToServer($cl_name);
                     sleep((int)$this->config['feeds_sleep_seconds']);
@@ -300,9 +301,15 @@ class CraigslistService
         foreach ($getDownloadedFeeds as $feed){
             unlink(__DIR__.'/../feeds/'.$feed);
         }
-        unlink(__DIR__.'/../cron_debug.txt');
+//        unlink(__DIR__.'/../cron_debug.txt');
 //        unlink(__DIR__.'/../catch_errors');
-
+        $content ='';
+        $fp = fopen( __DIR__ . "/../catch_errors","wb");
+        $fp2 = fopen( __DIR__ . "/../cron_debug.txt","wb");
+        fwrite($fp,$content);
+        fwrite($fp2,$content);
+        fclose($fp);
+        fclose($fp2);
         if($this->config['method'] =='upload'){
             CraigslistService::deleteFeedsFromServer();
         }
@@ -325,14 +332,13 @@ class CraigslistService
 
     /**
      * Get Debug Log
-     * @return bool|string
+     * @return bool[]|string[]
      */
     function getDebugLog(){
-        $debug_logs = array(
+        return array(
             'cron_debug'=>CraigslistService::getUrlContents(CraigslistService::getBaseUrl() . "cron_debug.txt") ?? '',
             'catch_errors'=>CraigslistService::getUrlContents(CraigslistService::getBaseUrl() . "catch_errors") ?? ''
         );
-        return $debug_logs;
     }
 
     /**

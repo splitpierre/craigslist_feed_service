@@ -51,7 +51,7 @@ if($success){
 
 <html lang="en">
 <head>
-    <title>CRAIGSLIST FEED DOWNLOADER AND SERVICE</title>
+    <title><?php echo $config['service_name'] ?> - CRAIGSLIST FEED DOWNLOADER AND SERVICE</title>
     <!-- Required meta tags -->
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
@@ -67,7 +67,7 @@ if($success){
     <div class="cover-container d-flex w-100 h-100 p-3 mx-auto flex-column">
         <header>
             <nav class="navbar navbar-expand-md navbar-dark fixed-top bg-dark">
-                <a class="navbar-brand btn btn-secondary" href="<?php echo (new CraigslistService())->getBaseUrl(); ?>"><b><i class="fa fa-rss"></i> SPORTSCARCURRENT SERVICE</b></a>
+                <a class="navbar-brand btn btn-secondary" href="<?php echo ($config['method'] == 'upload') ? (new CraigslistService())->getBaseUrl() : $config['ngrok_url'].$config['base_url']; ?>"><b><i class="fa fa-rss"></i> <?php echo $config['service_name'] ?></b></a>
 
                 <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
@@ -75,7 +75,7 @@ if($success){
                 <div class="collapse navbar-collapse" id="navbarCollapse">
 
                     <div class="mt-2 mt-md-0 ml-auto">
-                        <a data-toggle="tooltip" title="Last Time Cron Job Ran" href="<?php echo (new CraigslistService())->getBaseUrl(); ?>" class="btn btn-light btn-sm">
+                        <a data-toggle="tooltip" title="Last Time Cron Job Ran" href="<?php echo ($config['method'] == 'upload') ? (new CraigslistService())->getBaseUrl() : $config['ngrok_url'].$config['base_url']; ?>" class="btn btn-light btn-sm">
                             <i class="fa fa-clock-o"></i>
                             <b>
                             <?php
@@ -88,16 +88,24 @@ if($success){
                             ?>
                             </b>
                         </a>
+                        <?php $sync_counts = (new CraigslistService())->countSync();?>
+                        <?php $sync_class = ($sync_counts['downloaded'] == $sync_counts['all']) ? 'success' : 'info'; ?>
                         <a data-toggle="tooltip" title="Feeds Download Progress - The ETA might never
-                        finish if you have feeds with empty listing results on your source OPML files."
-                           href="<?php echo (new CraigslistService())->getBaseUrl(); ?>" class="btn btn-info btn-sm">
-                            <?php $sync_counts= (new CraigslistService())->countSync();?>
+                        finish if there are inconsistencies on the feed file/format/syntax."
+                           href="<?php echo ($config['method'] == 'upload') ? (new CraigslistService())->getBaseUrl() : $config['ngrok_url'].$config['base_url']; ?>"
+                           class="btn btn-<?php echo $sync_class; ?> btn-sm">
+
                             <i class="fa fa-refresh"></i> <b>Sync: <?php echo $sync_counts['downloaded'];?>/<?php echo $sync_counts['all'];?>
-                                | ETA:
                                 <?php
                                 $remaining_feeds = (int)$sync_counts['all'] - (int)$sync_counts['downloaded'];
                                 $minutesRemaining = ($remaining_feeds*(int)$config['cron_min_interval'])/(int)$config['feeds_per_minute'];
-                                echo (new CraigslistService())->convertToHoursMins($minutesRemaining, '%02d hours %02d minutes'); //
+                                if($minutesRemaining > 0){
+                                    ?>
+                                    | ETA:
+                                    <?php
+                                    echo (new CraigslistService())->convertToHoursMins($minutesRemaining, '%02d hours %02d minutes'); //
+                                }
+
                                 ?>
                             </b>
                         </a>
@@ -284,6 +292,76 @@ if($success){
                     </div>
 
                 </div>
+
+            </div>
+            <div class="container-fluid" style="max-height: 300px;height:300px;overflow: auto;">
+
+                <div class="row">
+                    <div class="col-md-6 card bg-light text-danger p-3">
+                        <?php
+                        $downloaded_feeds = (new CraigslistService())->getDownloadedFeeds();
+                        $downloadedFeeds = (!empty($downloaded_feeds) && is_array($downloaded_feeds)) ? $downloaded_feeds: array();
+                        $source_feeds = (new CraigslistService())->getOpmlList();
+                        foreach ($source_feeds as $key=>$source_feed) {
+                            if(in_array($source_feed['name'].'.xml' , $downloadedFeeds)) {
+                                unset($source_feeds[$key]);
+                            }
+                        }
+                        ?>
+                        <?php  if(count($source_feeds) > 0){
+                           ?>
+                            <h3>
+                                Remaining feeds (<?php echo count($source_feeds);?>):
+                            </h3>
+                            <div class="alert alert-warning">
+                                <h5>Common Causes</h5>
+                                <p>The feeds bellow have some kind of issue, check for:</p>
+                                <ul>
+                                    <li>Check if URL of the feed on the OPML is outdated</li>
+                                    <li>Check if it does a redirection (Eg.: from http://sfbayarea.craigslist.org it goes to https://sfbay.craigslist.org/).</li>
+                                    <li>Check if xml is valid</li>
+                                </ul>
+                            </div>
+                            <?php
+
+                            foreach ($source_feeds as $source_key=>$source_feed) {
+                                echo $source_key . ' - ' . $source_feed['name'].'<br>';
+                            }
+                        } else {
+                            ?>
+                            <div class="alert alert-success">
+                                <h1 class="text-center"><i class="fa fa-thumbs-up"></i></h1>
+                                <h5 class="text-center">Feeds are in sync!</h5>
+                            </div>
+                        <?php
+                        }
+
+                        ?>
+
+                    </div>
+                    <div class="col-md-6 card bg-dark text-success p-3">
+                        <h3 data-toggle="tooltip" title="System Variables">System Variables</h3>
+                        <ul>
+                            <li><b>Service Method: </b><?php echo $config['method']; ?></li>
+                            <li><b>Base URL: </b><?php echo $config['base_url']; ?></li>
+                            <li><b>NGROK URL: </b><?php echo $config['ngrok_url']; ?></li>
+                            <li><b>Localhost:</b> <?php echo $config['localhost']; ?></li>
+                            <li><b>Download Feeds per Minute:</b> <?php echo $config['feeds_per_minute']; ?> /min</li>
+                            <li><b>Sleep Between Downloads:</b> <?php echo $config['feeds_sleep_seconds']; ?> sec(s)</li>
+                            <li><b>Cron Interval: </b><?php echo $config['cron_min_interval']; ?> /min</li>
+                            <li><b>SFTP Server Base:</b> <?php echo $config['server_base']; ?></li>
+                            <li><b>SFTP Base Directory:</b> <?php echo $config['sftp_dir']; ?></li>
+                            <li><b>SFTP HOST:PORT:</b> <?php echo $config['sftp_server']; ?>:<?php echo $config['sftp_port']; ?></li>
+                            <li><b>SFTP Username: </b><?php echo $config['sftp_login']; ?></li>
+                            <li><b>SFTP Key Passphrase: </b>**************</li>
+                            <li><b>SFTP RSA Key Name:</b> <?php echo $config['sftp_key']; ?></li>
+
+                        </ul>
+
+                    </div>
+                </div>
+
+
 
             </div>
         </main>
