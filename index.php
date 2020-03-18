@@ -257,18 +257,22 @@ if($success){
 
                     <div class="container-fluid border-bottom border-left border-right bg-white">
                         <div class="row p-3 ">
-                            <div class="col-md-6">
+                            <div class="col-md-6" style="max-height: 700px;overflow-y: scroll;">
                                 <h3>Debug Log:</h3>
-                                <div class="text-danger">
+                                <ul class="">
                                     <?php
                                     $explode = explode(PHP_EOL, (string)(new CraigslistService())->getDebugLog()['cron_debug']);
-                                    foreach ($explode as $line){
-                                        echo ($line) .'<br>';
+                                    foreach (array_reverse($explode) as $line){
+                                        if(strpos($line, 'success')){
+                                            echo '<li class="text-success">'.$line.'</li>';
+                                        } else {
+                                            echo '<li class="text-danger">'.$line.'</li>';
+                                        }
                                     }
                                     ?>
-                                </div>
+                                </ul>
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-6"  style="max-height: 700px;overflow-y: scroll;">
                                 <h3>Last Errors Thrown by Cron Task:</h3>
                                 <?php
                                 print_r((new CraigslistService())->getDebugLog()['catch_errors']);
@@ -348,7 +352,8 @@ if($success){
                             <li><b>Localhost:</b> <?php echo $config['localhost']; ?></li>
                             <li><b>Download Feeds per Minute:</b> <?php echo $config['feeds_per_minute']; ?> /min</li>
                             <li><b>Sleep Between Downloads:</b> <?php echo $config['feeds_sleep_seconds']; ?> sec(s)</li>
-                            <li><b>Cron Interval: </b><?php echo $config['cron_min_interval']; ?> /min</li>
+                            <li><b>Cron Download Interval: </b>At every <?php echo $config['cron_min_interval']; ?> min</li>
+                            <li><b>Cron Reset Interval: </b>At minute 0 past every 6th hour</li>
                             <li><b>SFTP Server Base:</b> <?php echo $config['server_base']; ?></li>
                             <li><b>SFTP Base Directory:</b> <?php echo $config['sftp_dir']; ?></li>
                             <li><b>SFTP HOST:PORT:</b> <?php echo $config['sftp_server']; ?>:<?php echo $config['sftp_port']; ?></li>

@@ -103,7 +103,7 @@ class CraigslistService
     }
 
     /**
-     * Download One Random Feed (Existing ones excluded)
+     * Download X Feeds (Existing ones excluded)
      * @return bool
      */
     function downloadFeeds(){
@@ -117,14 +117,17 @@ class CraigslistService
                 unset($source_feeds[$key]);
             }
         }
-        $source_feeds = array_values($source_feeds);
+        $source_feeds = array_values($source_feeds);//reset array keys
 
+        //loop feeds_per_minute
         for ($i = 1; $i <= (int)$this->config['feeds_per_minute']; $i++) {
-            $pickSingleFeed = rand(0,count($source_feeds));
             $handle = @fopen($source_feeds[$i]['url'], 'r');
 
             if(!$handle){
-                (new CraigslistService)->logDebug(json_encode(array('downloadFeeds_ISSUE', date('Y-m-d_H-i-s', time()), $source_feeds[$i]['url'])));
+                $feedUrl = $source_feeds[$i]['url'];
+                if($feedUrl !== null){
+                    (new CraigslistService)->logDebug(json_encode(array('issue_downloading_feed', date('Y-m-d_H-i-s', time()), $source_feeds[$i]['url'])));
+                }
             }else{
                 $cl = (file_get_contents($source_feeds[$i]['url'])) ?? null;
                 $cl_xml = simplexml_load_string($cl);
@@ -184,16 +187,16 @@ class CraigslistService
         fwrite($fp,$opml_header.$opml_content.$opml_footer);
         fclose($fp);
 
-
+        //delete remote opml_local.xml
         if ($sftp->login($this->config['sftp_login'], $key) ) {
             $sftp->chdir($this->config['sftp_dir']);
             $sftp->delete('opml_local.xml', false);
             $sftp->chdir('..');
             $sftp->chdir('..');
             if($sftp->put($this->config['sftp_dir'].'/opml_local.xml', __DIR__.'/../opml_local.xml', SFTP::SOURCE_LOCAL_FILE)){
-                (new CraigslistService)->logDebug(json_encode(array('sftp_opml_local_success', date('Y-m-d_H-i-s', time()))));
+                (new CraigslistService)->logDebug(json_encode(array('sftp_opml_upload_success', date('Y-m-d_H-i-s', time()))));
             } else {
-                (new CraigslistService)->logDebug(json_encode(array('sftp_opml_local_failed', date('Y-m-d_H-i-s', time()))));
+                (new CraigslistService)->logDebug(json_encode(array('sftp_opml_upload_failed', date('Y-m-d_H-i-s', time()))));
             }
         } else {
             (new CraigslistService)->logDebug(json_encode(array('sftp_connect_failed_gen_opml', date('Y-m-d_H-i-s', time()))));
