@@ -187,6 +187,7 @@ if($success){
                                 <ul>
                                     <li>Make sure you only add .opml files generated with OPML Editor.</li>
                                     <li>Those are the list of feeds from all .opml files inside /opml folder.</li>
+                                    <li>The .opml file names cannot contain spaces or special characters</li>
                                 </ul>
                             </div>
                         </div>
@@ -315,11 +316,11 @@ if($success){
                         <?php  if(count($source_feeds) > 0){
                            ?>
                             <h3>
-                                Remaining feeds (<?php echo count($source_feeds);?>):
+                                Remaining feeds (<?php echo $sync_counts['all']-$sync_counts['downloaded'];?>):
                             </h3>
                             <div class="alert alert-warning">
                                 <h5>Common Causes</h5>
-                                <p>The feeds bellow have some kind of issue, check for:</p>
+                                <p>If the sync doesn't finish and you see feeds bellow, they likely have some kind of issue:</p>
                                 <ul>
                                     <li>Check if URL of the feed on the OPML is outdated</li>
                                     <li>Check if it does a redirection (Eg.: from http://sfbayarea.craigslist.org it goes to https://sfbay.craigslist.org/).</li>

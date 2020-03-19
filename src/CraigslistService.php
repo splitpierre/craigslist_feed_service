@@ -282,11 +282,12 @@ class CraigslistService
         }
         $content ='';
         $fp = fopen( __DIR__ . "/../catch_errors","wb");
-        $fp2 = fopen( __DIR__ . "/../cron_debug.txt","wb");
         fwrite($fp,$content);
-        fwrite($fp2,$content);
         fclose($fp);
+        $fp2 = fopen( __DIR__ . "/../cron_debug.txt","wb");
+        fwrite($fp2,$content);
         fclose($fp2);
+        unlink(__DIR__.'/../opml_local.xml');
         if($this->config['method'] =='upload'){
             CraigslistService::deleteFeedsFromServer();
         }
